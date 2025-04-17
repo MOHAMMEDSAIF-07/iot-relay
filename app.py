@@ -1,17 +1,18 @@
 from flask import Flask, render_template, request, jsonify
 import pymongo
 from bson.objectid import ObjectId
+import os
 
 app = Flask(__name__)
 
-# Database configuration - same as in main.py
-MONGO_URI = "mongodb+srv://mdsaif123:22494008@iotusingrelay.vfu72n2.mongodb.net/"
-DB_NAME = "test"
-COLLECTION_NAME = "devices"
+# Database configuration
+MONGO_URI = os.environ.get('MONGO_URI', "mongodb+srv://mdsaif123:22494008@iotusingrelay.vfu72n2.mongodb.net/")
+DB_NAME = os.environ.get('DB_NAME', "test")
+COLLECTION_NAME = os.environ.get('COLLECTION_NAME', "devices")
 
 # Initialize MongoDB connection
 try:
-    mongo_client = pymongo.MongoClient(MONGO_URI)
+    mongo_client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
     # Ping the server to verify the connection
     mongo_client.admin.command('ping')
     print("Successfully connected to MongoDB!")
@@ -19,7 +20,6 @@ try:
     device_collection = database[COLLECTION_NAME]
 except Exception as e:
     print(f"MongoDB connection error: {e}")
-    # Continue with app setup but we'll handle the error later
     mongo_client = None
     database = None
     device_collection = None
@@ -35,10 +35,14 @@ LED_CONFIG = [
 @app.route('/')
 def index():
     """Render the main control page"""
-    if device_collection is None:
-        return render_template('index.html', devices=[], error="Database connection failed")
-    devices = list(device_collection.find())
-    return render_template('index.html', devices=devices)
+    try:
+        if device_collection is None:
+            return render_template('index.html', devices=[], error="Database connection failed")
+        devices = list(device_collection.find())
+        return render_template('index.html', devices=devices)
+    except Exception as e:
+        print(f"Error in index route: {e}")
+        return render_template('index.html', devices=[], error=str(e))
 
 @app.route('/api/devices', methods=['GET'])
 def get_devices():
@@ -127,75 +131,5 @@ def update_all_names():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # Only attempt to initialize database if connection was successful
-    if device_collection is not None:
-        # Check if devices exist in the collection, create them if not
-        if device_collection.count_documents({}) == 0:
-            # Create the 4 LED devices
-            for led in LED_CONFIG:
-                device_collection.insert_one({
-                    "name": led["name"],
-                    "pin": led["pin"],
-                    "device_type": led["device_type"],
-                    "state": False
-                })
-            print("Created LED devices in database")
-        else:
-            # Verify all devices have correct names and update if necessary
-            devices = list(device_collection.find())
-            update_needed = False
-            
-            # Check if we have exactly 4 devices with correct names
-            if len(devices) != 4:
-                update_needed = True
-            else:
-                # Check device names and types
-                device_pins = [device.get('pin') for device in devices]
-                for led in LED_CONFIG:
-                    if led['pin'] not in device_pins:
-                        update_needed = True
-                        break
-                        
-                    # Verify correct names
-                    for device in devices:
-                        if device.get('pin') == led['pin'] and (device.get('name') != led['name'] or device.get('device_type') != led['device_type']):
-                            update_needed = True
-                            break
-            
-            if update_needed:
-                # Clear and recreate all devices
-                device_collection.delete_many({})
-                for led in LED_CONFIG:
-                    device_collection.insert_one({
-                        "name": led["name"],
-                        "pin": led["pin"],
-                        "device_type": led["device_type"],
-                        "state": False
-                    })
-                print("Reset LED devices in database")
-            else:
-                print("LED devices already exist with correct configuration")
-        
-        # Update any devices with old names on startup
-        devices = list(device_collection.find())
-        updated = 0
-        for device in devices:
-            pin = device.get('pin')
-            for led_config in LED_CONFIG:
-                if led_config['pin'] == pin and (device.get('name') != led_config['name'] or device.get('device_type') != led_config['device_type']):
-                    device_collection.update_one(
-                        {"_id": device['_id']},
-                        {"$set": {
-                            "name": led_config['name'],
-                            "device_type": led_config['device_type']
-                        }}
-                    )
-                    updated += 1
-                    break
-        
-        if updated > 0:
-            print(f"Updated {updated} device names to LED format")
-    else:
-        print("WARNING: Starting app without database connection. App will run in limited mode.")
-    
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False) 
