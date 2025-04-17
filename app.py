@@ -1,18 +1,13 @@
 from flask import Flask, render_template, request, jsonify
 import pymongo
 from bson.objectid import ObjectId
-import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 app = Flask(__name__)
 
-# Database configuration from environment variables
-MONGO_URI = os.getenv('MONGO_URI')
-DB_NAME = os.getenv('DB_NAME')
-COLLECTION_NAME = os.getenv('COLLECTION_NAME')
+# Database configuration - same as in main.py
+MONGO_URI = "mongodb+srv://mdsaif123:22494008@iotusingrelay.vfu72n2.mongodb.net/"
+DB_NAME = "test"
+COLLECTION_NAME = "devices"
 
 # Initialize MongoDB connection
 try:
